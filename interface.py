@@ -5,6 +5,7 @@ from scapy.layers.l2 import ARP
 from scapy.layers.inet import IP, ICMP, Ether
 from scapy.all import *
 
+
 class Interface:
     def __init__(self, ip, mask):
         self.router = None

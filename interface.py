@@ -8,7 +8,7 @@ from scapy.all import *
 
 class Interface:
     def __init__(self, ip, mask):
-        self.router = None
+        self.device = None
         self.mac = "02:00:00:%02x:%02x:%02x" % (random.randint(0, 255),
                              random.randint(0, 255),
                              random.randint(0, 255))
@@ -19,8 +19,8 @@ class Interface:
         self.arp_table = {}
         self.cache = []
 
-    def install(self, r):
-        self.router = r
+    def install(self, d):
+        self.device = d
 
     def connect_wire(self, w):
         self.wire = w
@@ -52,7 +52,7 @@ class Interface:
                     self.arp_table[packet[ARP].psrc] = packet[ARP].hwsrc
 
             else:
-                self.router.receive_data(self, packet)
+                self.device.receive_data(self, packet)
 
         # iterate through cache, send stored packets
         tmp = []

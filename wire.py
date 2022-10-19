@@ -13,7 +13,8 @@ class Wire:
         return bytes_base64(zlib.compress(six.moves.cPickle.dumps(obj, 2), 9))
 
     def push(self, data):
-        data.show()
+        if not data.haslayer(ARP):
+            data.show()
 
         with self.data_lock:
             self.container.append(self.export_scapy(data))

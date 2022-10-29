@@ -4,7 +4,7 @@ from random import randint
 from scapy.all import *
 import scapy.all as scapy
 from scapy.layers.inet import IP, ICMP, Ether, TCP
-from scapy.contrib.bgp import BGPHeader, BGPOpen, BGPUpdate, BGPPathAttr, BGPNLRI_IPv4, BGPPALocalPref
+from scapy.contrib.bgp import BGPHeader, BGPOpen, BGPUpdate, BGPPathAttr, BGPNLRI_IPv4, BGPPALocalPref, BGPKeepAlive
 
 
 from scapy.layers.l2 import ARP
@@ -28,21 +28,22 @@ class Router:
             "obj": i,
             "bgp": {
                 "status": "Off",
+                "state": "IDLE",
+                "hold_time": 90,
                 "neighbour_as": None,
-                "neighbour_id": None
+                "neighbour_id": None,
+                "keepalive_timer": 0
             }
         }
 
         self.sessions[i.ip] = {}
 
-    def set_bgp(self, ip, status, neighbour_as=None, neighbour_id=None):
-        self.interfaces[ip]["bgp"] = {
-            "state": "IDLE",
-            "status": status,
-            "hold_time": 90,
-            "neighbour_as": neighbour_as,
-            "neighbour_id": neighbour_id
-        }
+    def set_bgp(self, ip, status, neighbour_as=None, neighbour_id=None, hold_time = 90):
+        self.interfaces[ip]['bgp']['status'] = status
+        self.interfaces[ip]['bgp']['hold_time'] = hold_time
+        self.interfaces[ip]['bgp']['neighbour_as'] = neighbour_as
+        self.interfaces[ip]['bgp']['neighbour_id'] = neighbour_id
+        self.interfaces[ip]['bgp']['keepalive_timer'] = 0
 
     def bgp_executor(self, session, data):
         # получили что то по bgp
@@ -174,43 +175,43 @@ class Router:
                     # add random number as timeout, timeout-- in main cycle later drop when 0
                     session['closing_counter'] = randint(1, 15)
             else:
-                if packet.haslayer(BGPOpen):
-                    bgp_settings = self.interfaces[interface.ip]['bgp']
-                    bgp = packet.getlayer('OPEN')
-
-                    if self.interfaces[interface.ip]['bgp']['state'] == 'ACTIVE':
+                bgp_session = self.interfaces[interface.ip]['bgp']
+                if packet.haslayer(BGPHeader):
+                    # we got OPEN
+                    if bgp_session['state'] == 'ACTIVE' and packet.haslayer(BGPOpen):
+                        bgp = packet.getlayer('OPEN')
                         session = self.get_session_by_port(dst_ip, src_ip, packet[TCP].sport, packet[TCP].dport)
-                        if bgp_settings['neighbour_as'] == bgp.my_as and bgp_settings['neighbour_id'] == bgp.bgp_id:
-                            bgp_settings['hold_time'] = bgp.hold_time
+                        if bgp_session['neighbour_as'] == bgp.my_as and bgp_session['neighbour_id'] == bgp.bgp_id:
                             session['ack_num'] += len(packet[TCP].payload)
-
                             open_packet = self.craft_tcp(interface.ip, bgp.bgp_id, session)
                             hdr = BGPHeader(type=1, marker=0xffffffffffffffffffffffffffffffff)
 
-                            op = BGPOpen(my_as=self.as_id, hold_time=90, bgp_id=interface.ip)
+                            if bgp_session['hold_time'] > bgp.hold_time:
+                                bgp_session['hold_time'] = bgp.hold_time
 
+                            op = BGPOpen(my_as=self.as_id, hold_time=bgp_session['hold_time'], bgp_id=interface.ip)
                             full_packet = open_packet / hdr / op
                             session['seq_num'] += len(full_packet[TCP].payload)
                             interface.send_data(full_packet)
-                            self.interfaces[interface.ip]['bgp']['state'] = 'ESTABLISHED'
-                    elif self.interfaces[interface.ip]['bgp']['state'] == 'OPEN SENT':
+                            bgp_session['state'] = 'ESTABLISHED'
+                    # we sent OPEN and got an answer
+                    elif bgp_session['state'] == 'OPEN SENT' and packet.haslayer(BGPOpen):
+                        bgp = packet.getlayer('OPEN')
                         session = self.get_session_by_port(dst_ip, src_ip, packet[TCP].dport, packet[TCP].sport)
-                        self.interfaces[interface.ip]['bgp']['state'] = 'ESTABLISHED'
+                        bgp_session['state'] = 'ESTABLISHED'
+
+                        if bgp_session['hold_time'] > bgp.hold_time:
+                            bgp_session['hold_time'] = bgp.hold_time
+
+                        bgp_session['keepalive_timer'] = 0
                         session['ack_num'] += len(packet[TCP].payload)
                         packet_ack = self.craft_tcp(interface.ip, src_ip, session, 'A')
                         interface.send_data(packet_ack)
+                    # got KEEPALIVE
+                elif packet.haslayer(BGPKeepAlive) and bgp_session['state'] == 'ESTABLISHED':
+                    print("GOT KEEPALIVE")
 
-
-            # ANSWER
-
-                # получили пакет
-                # проверили последовательность
-                    # если больше - то в кеш
-                    # равно - вызываем bgp_executor
-                    # проверяем есть ли что в кеше, если есть вызываем bgp_executor, выкидываем из кеша
-
-
-    def craft_tcp(self, src_ip, dst_ip, session, flags = ''):
+    def craft_tcp(self, src_ip, dst_ip, session, flags=''):
         sport = session['sport']
         dport = session['dport']
 
@@ -224,22 +225,22 @@ class Router:
             flags=flags,
             seq=session['seq_num'],
             ack=session['ack_num'])
-
         return packet
 
+    
     def automate(self):
         for key, i in self.interfaces.items():
             with self.sessions_lock:
-                #print(i['bgp']['state'])
-                if i['bgp']['status'] == 'On':
-                    session = self.get_any_session_by_port(i['ip'], i['bgp']['neighbour_id'], 179)
+                bgp_session = i['bgp']
+                if bgp_session['status'] == 'On':
+                    #print(i['bgp']['state'])
+                    session = self.get_any_session_by_port(i['ip'], bgp_session['neighbour_id'], 179)
                     if session is None:
                         i['bgp']['state'] = 'CONNECT'
                         seq_num = randint(1, 2 ** 30)
                         src_port = randint(49152, 65535)
-                        new_session = self.create_session(i['ip'], i['bgp']['neighbour_id'], src_port, 179, 'SYN-SENT', 'OUT', seq_num)
-
-                        packet_syn = self.craft_tcp(i['ip'], i['bgp']['neighbour_id'], new_session, 'S')
+                        new_session = self.create_session(i['ip'], bgp_session['neighbour_id'], src_port, 179, 'SYN-SENT', 'OUT', seq_num)
+                        packet_syn = self.craft_tcp(i['ip'], bgp_session['neighbour_id'], new_session, 'S')
                         new_session['seq_num'] += 1
                         i['obj'].send_data(packet_syn)
                     elif session['state'] == 'CLOSING':
@@ -247,50 +248,38 @@ class Router:
 
                         if session['closing_counter'] == 0:
                             to_del = None
-                            for j in range(len(self.sessions[i['ip']][i['bgp']['neighbour_id']]['tcp'])):
-                                if self.sessions[i['ip']][i['bgp']['neighbour_id']]['tcp'][j] == session:
+                            for j in range(len(self.sessions[i['ip']][bgp_session['neighbour_id']]['tcp'])):
+                                if self.sessions[i['ip']][bgp_session['neighbour_id']]['tcp'][j] == session:
                                     to_del = j
 
-                            self.sessions[i['ip']][i['bgp']['neighbour_id']]['tcp'].pop(to_del)
+                            self.sessions[i['ip']][bgp_session['neighbour_id']]['tcp'].pop(to_del)
                     else:
-                        # SEND SECTION
-                        # KEEP ALIVE, UPDATE, OPEN
-                        # если сессия в BGP статусе ESTABLISHED уменьшаем KEEPALIVE таймер
-                        # если он 0 - отправляем пакет KEEPALIVE
-                        # если есть изменения в состоянии интерфейсов - отправляем UPDATE
-                        if i['bgp']['state'] == 'ACTIVE' and session['direction'] == 'OUT':
-                            # если мы инициировали сессию - и статус BGP ACTIVE направляем OPEN, меняем статус на OPEN SENT
-                            packet = self.craft_tcp(i['ip'], i['bgp']['neighbour_id'], session)
-                            # type=1 means OPEN
-                            # type=2 means UPDATE packet will be the BGP Payload, marker field is for authentication.
-                            # max hex int (all f) are used for no auth.
-                            # update packet consist of path attributes and NLRI (Network layer reachability information),
-                            # type_code in path attributes is for which type of path attribute it is. [more][3]
-
-                            # NLRI_PREFIX = '10.110.99.0/24'
+                        # send OPEN
+                        if bgp_session['state'] == 'ACTIVE' and session['direction'] == 'OUT':
+                            packet = self.craft_tcp(i['ip'], bgp_session['neighbour_id'], session)
                             hdr = BGPHeader(type=1,
                                             marker=0xffffffffffffffffffffffffffffffff)
-
-                            #up = BGPUpdate(path_attr=[
-                            #    BGPPathAttr(type_flags=64, type_code=5, attribute=BGPPALocalPref(local_pref=100))],
-                            #    nlri=BGPNLRI_IPv4(
-                            #    prefix=NLRI_PREFIX))
-
-                            op = BGPOpen(my_as=self.as_id, hold_time=90, bgp_id=i['ip'])
+                            op = BGPOpen(my_as=self.as_id, hold_time=bgp_session['hold_time'], bgp_id=i['ip'])
 
                             bgp = packet / hdr / op
                             i['obj'].send_data(bgp)
-                            i['bgp']['state'] = 'OPEN SENT'
-                            i['bgp']['open_time'] = 1
-                            session['old_seq_num'] = session['seq_num']
+                            bgp_session['state'] = 'OPEN SENT'
                             session['seq_num'] = session['seq_num'] + len(bgp[TCP].payload)
-                        elif i['bgp']['state'] == 'OPEN SENT':
-                            if i['bgp']['open_time'] > 20:
-                                session['seq_num'] = session['old_seq_num']
-                                i['bgp']['state'] = 'ACTIVE'
+                        elif bgp_session['state'] == 'ESTABLISHED':
+                            if bgp_session['keepalive_timer'] == 0:
+                                #send KEEPALIVE
+                                bgp_kpa = self.craft_tcp(i['ip'], bgp_session['neighbour_id'], session)
+                                hdr = BGPHeader(type=4, marker=0xffffffffffffffffffffffffffffffff)
+                                kpa = BGPKeepAlive()
+                                full_packet = bgp_kpa / hdr / kpa
+                                session['seq_num'] += len(full_packet[TCP].payload)
+                                i['obj'].send_data(full_packet)
+
+                                bgp_session['keepalive_timer'] = bgp_session['hold_time'] * 2
                             else:
-                                i['bgp']['open_time'] += 1
-        sleep(0.4)
+                                bgp_session['keepalive_timer'] -= 1
+
+        sleep(0.5)
 
     def on(self):
         self.state = 1

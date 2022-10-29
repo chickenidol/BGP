@@ -2,7 +2,7 @@ from scapy.layers.l2 import ARP
 from scapy.layers.inet import IP, ICMP, Ether
 from scapy.all import *
 import threading
-
+from scapy.contrib.bgp import BGPHeader, BGPOpen, BGPUpdate, BGPPathAttr, BGPNLRI_IPv4, BGPPALocalPref, BGPKeepAlive
 class Wire:
     def __init__(self):
         self.container = []
@@ -13,8 +13,8 @@ class Wire:
         return bytes_base64(zlib.compress(six.moves.cPickle.dumps(obj, 2), 9))
 
     def push(self, data):
-        if not data.haslayer(ARP):
-            data.show()
+        #if data.haslayer(BGPHeader):
+        data.show()
 
         with self.data_lock:
             self.container.append(self.export_scapy(data))

@@ -4,46 +4,36 @@ from scapy.all import *
 import scapy.all as scapy
 from scapy.layers.inet import IP, ICMP, Ether
 from scapy.layers.l2 import ARP
-
-
 from router import Router
 from wire import Wire
 from interface import Interface
+from bgp import BGP
 
-i1 = Interface('172.16.1.1', 30)
-i2 = Interface('172.16.1.2', 30)
-i3 = Interface('172.16.10.1', 30)
-i4 = Interface('172.16.10.2', 30)
-
-
-wire = Wire()
-wire2 = Wire()
-
-i2.connect_wire(wire)
-i1.connect_wire(wire)
-
-i3.connect_wire(wire2)
-i4.connect_wire(wire2)
-
+# Routers
 r1 = Router('r1', 501)
 r2 = Router('r2', 502)
-r3 = Router('r3', 503)
 
-r1.add_interface(i1)
-r1.add_interface(i3)
+# Interfaces
+r1_i1 = Interface('10.0.1.1', 24)
+r1.add_interface(r1_i1)
 
-r2.add_interface(i2)
-r3.add_interface(i4)
+r2_i1 = Interface('10.0.1.2', 24)
+r2.add_interface(r2_i1)
 
-r1.set_bgp('172.16.1.1', 'On', 502, '172.16.1.2')
-#r1.set_bgp('172.16.10.1', 'On', 503, '172.16.10.2')
-r2.set_bgp('172.16.1.2', 'On', 501, '172.16.1.1')
-#r3.set_bgp('172.16.10.2', 'On', 501, '172.16.10.1')
+# Wires
+wire1 = Wire()
+r1_i1.connect_wire(wire1)
+r2_i1.connect_wire(wire1)
 
-control_list = []
-control_list.append(r1.on())
-control_list.append(r2.on())
-control_list.append(r3.on())
+bgp_501 = BGP(501, 502, '10.0.1.1', '10.0.1.2')
+bgp_502 = BGP(502, 501, '10.0.1.2', '10.0.1.1')
+
+r1.set_bgp(bgp_501)
+r2.set_bgp(bgp_502)
+
+# Start the routers
+r1.on()
+r2.on()
 
 c = 0
 while True:
@@ -55,11 +45,6 @@ while True:
 
 r1.off()
 r2.off()
-r3.off()
-
-for i in control_list:
-    i.join()
-
 
 def test_send():
     packet = IP(dst="8.8.8.8", ttl=20) / ICMP()

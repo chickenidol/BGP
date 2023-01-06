@@ -18,6 +18,7 @@ class Interface:
         self.wire = None
         self.arp_table = {}
         self.cache = []
+        self.t_thread = None
 
     def install(self, d):
         self.device = d
@@ -72,7 +73,8 @@ class Interface:
 
     def on(self):
         self.state = 1
-        return threading.Thread(target=self.main_thread)
+        self.t_thread = threading.Thread(target=self.main_thread)
+        self.t_thread.start()
 
     def off(self):
         self.state = 0

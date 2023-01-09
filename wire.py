@@ -16,11 +16,12 @@ class Wire:
 
     def push(self, data):
         #if data.haslayer(BGPHeader):
-        data.show()
-        #wrpcap('filtered.pcap', data, append=True)
+        #data.show2()
+        wrpcap('filtered.pcap', data, append=True)
 
         with self.data_lock:
-            self.container.append(self.export_scapy(data))
+            #self.container.append(self.export_scapy(data))
+            self.container.append(data)
 
     def pop(self, mac):
 
@@ -28,13 +29,15 @@ class Wire:
         with self.data_lock:
             for i in range(len(self.container)):
                 # craft Ether packet
-                packet = import_object(self.container[i])
+                #packet = import_object(self.container[i])
+                packet = self.container[i]
                 if packet.src != mac:
                     if packet.dst == 'ff:ff:ff:ff:ff:ff' or packet.dst == mac:
                         ret_index = i
                         break
 
             if ret_index is not None:
-                return import_object(self.container.pop(ret_index))
+                #return import_object(self.container.pop(ret_index))
+                return self.container.pop(ret_index)
 
         return None

@@ -14,11 +14,21 @@ r1 = Router('r1', 501)
 r2 = Router('r2', 502)
 
 # Interfaces
-r1_i1 = Interface('10.0.1.1', 24)
+r1_i1 = Interface('10.0.1.1', '255.255.255.252')
 r1.add_interface(r1_i1)
 
-r2_i1 = Interface('10.0.1.2', 24)
+r1_i2 = Interface('20.0.0.254', '255.255.0.0')
+r1.add_interface(r1_i2)
+
+r1.add_bgp_network('20.0.0.0', '255.255.0.0')
+
+r2_i1 = Interface('10.0.1.2', '255.255.255.252')
 r2.add_interface(r2_i1)
+
+r2_i2 = Interface('30.0.0.254', '255.255.0.0')
+r2.add_interface(r2_i2)
+
+r2.add_bgp_network('30.0.0.0', '255.255.0.0')
 
 # Wires
 wire1 = Wire()

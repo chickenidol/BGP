@@ -68,6 +68,10 @@ class Interface:
 
     def main_thread(self):
         while self.state:
+            if not self.wire:
+                sleep(2)
+                continue
+
             self.automate()
             sleep(0.1)
 

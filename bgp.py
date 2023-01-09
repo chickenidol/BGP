@@ -2,7 +2,11 @@ from sock import Sock
 from time import sleep
 import threading
 from random import randint
-from scapy.contrib.bgp import BGPHeader, BGPOpen, BGPUpdate, BGPPathAttr, BGPNLRI_IPv4, BGPPALocalPref, BGPKeepAlive
+from scapy.contrib.bgp import BGPHeader, BGPOpen, BGPUpdate, BGPPathAttr, BGPNLRI_IPv4, BGPPALocalPref, BGPKeepAlive, \
+    BGPPANextHop, BGPPAAS4BytesPath, BGPPAASPath
+
+from tools import int_to_ip, netmask_to_bits, craft_bgp_update, ip_to_int, cidr_to_netmask
+
 
 class BGP:
     def __init__(self, my_as, neighbour_as, my_ip, neighbour_ip):
@@ -26,6 +30,8 @@ class BGP:
         self.container = []
         self.data_lock = threading.Lock()
 
+        self.shared_routes = {}
+
     def install(self, r):
         self.router = r
 
@@ -41,6 +47,26 @@ class BGP:
                     if data.haslayer(BGPKeepAlive):
                         self.neighbour_keepalive = 0
                         print(f"{self.my_ip} received KEEPALIVE")
+                    elif data.haslayer(BGPUpdate):
+                        up_layer = data.getlayer(BGPUpdate)
+                        nlri = up_layer.nlri[0].prefix
+                        network = nlri.split('/')[0]
+                        mask = cidr_to_netmask(nlri.split('/')[1])
+                        as_path = []
+
+                        if up_layer.haslayer(BGPPAAS4BytesPath):
+                            segments = up_layer.getlayer(BGPPAAS4BytesPath).segments
+
+                            for s in segments:
+                                as_path.append(s.segment_value[0])
+
+                            h = up_layer.getlayer(BGPPANextHop)
+                            next_hop = h.next_hop
+
+                            self.router.add_bgp_route(network, mask, next_hop, as_path)
+
+                    # встречаем UPDATE, обрабатываем, дергаем callback роутера, передаем массив маршрутов
+                    # он который вносит данные в список BGP с блокировкой
 
             sleep(0.1)
 
@@ -70,10 +96,41 @@ class BGP:
             client_socket.close()
             return None, None
 
-    def update_route(self, route):
-        with self.data_lock:
-            # просто произвольный текст пока
-            self.container.append(route)
+    def add_internal_routes(self, routes):
+        hdr = BGPHeader(type=2, marker=0xffffffffffffffffffffffffffffffff)
+
+        for r in routes:
+            network = int_to_ip(r[0])
+            mask = str(netmask_to_bits(int_to_ip(r[1])))
+            nlri = network + '/' + mask
+            as_path = [self.my_as]
+            key = nlri + "_" + ' '.join(map(str, as_path))
+            if key not in self.shared_routes:
+                self.shared_routes[key] = (nlri, as_path)
+                bgp_update = hdr / craft_bgp_update('IGP', as_path, self.my_ip, nlri)
+                with self.data_lock:
+                    self.container.append(bgp_update)
+
+    def add_shared_routes(self, routes):
+        hdr = BGPHeader(type=2, marker=0xffffffffffffffffffffffffffffffff)
+
+        for r in routes:
+            if self.my_as in r.path:
+                continue
+
+            if self.neighbour_as in r.path:
+                continue
+
+            network = int_to_ip(r.network)
+            mask = netmask_to_bits(int_to_ip(r.mask))
+            nlri = network + '/' + mask
+            as_path = [self.my_as] + r.path
+            key = nlri + "_" + ' '.join(as_path)
+            if key not in self.shared_routes:
+                self.shared_routes[key] = (nlri, as_path)
+                bgp_update = hdr / craft_bgp_update('IGP', as_path, self.my_ip, nlri)
+                with self.data_lock:
+                    self.container.append(bgp_update)
 
     def main_thread(self):
         self.state = 'CONNECT'
@@ -123,6 +180,7 @@ class BGP:
                     self.state = 'ERROR'
                     self.error_code = 2
                     print(f"2. {self.my_ip} Wrong neighbour.")
+                    # send NOTIFICATION message
             else:
                 self.state = 'ERROR'
                 self.error_code = 1
@@ -135,17 +193,17 @@ class BGP:
             th_receive = threading.Thread(target=self.receive_thread)
             th_receive.start()
 
-            keepalive_timer = self.hold_time
+            keepalive_timer = self.hold_time / 3
             self.neighbour_keepalive = 0
 
             while self.state == 'ESTABLISHED':
                 if self.hold_time > 0:
-                    if keepalive_timer == self.hold_time:
+                    if keepalive_timer == self.hold_time / 3:
                         kpa = BGPKeepAlive()
                         self.working_socket.sendall(kpa)
                         keepalive_timer = 0
 
-                    if self.neighbour_keepalive > self.hold_time * 2:
+                    if self.neighbour_keepalive > self.hold_time:
                         self.state = 'ERROR'
                         self.error_code = 4
                         print(f'4. No keepalive from the neighbour. {self.my_ip}')

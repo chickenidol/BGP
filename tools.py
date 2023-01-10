@@ -57,6 +57,11 @@ def craft_bgp_update(origin, as_path, next_hop, nlri):
     return bgp_update
 
 
+def del_from_list(arr, to_del):
+    for i in sorted(to_del, reverse=True):
+        del arr[i]
+
+
 debug_print_lock = threading.Lock()
 debug_level = 5
 

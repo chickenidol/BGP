@@ -5,7 +5,7 @@ from scapy.layers.inet import IP, ICMP, Ether, TCP
 
 from bgproute import BGPRoute
 from route import Route
-from tools import ip_to_int, int_to_ip, debug_message
+from tools import ip_to_int, int_to_ip, debug_message, del_from_list
 
 
 class Router:
@@ -177,9 +177,10 @@ class Router:
 
             for i in to_del:
                 r = self.bgp_routing_table[i]
-                self.bgp_routing_table.pop(i)
                 self.send_withdraw_route(r)
                 self.drop_route(r)
+
+            del_from_list(self.bgp_routing_table, to_del)
 
     def send_withdraw_route(self, bgp_route):
         for key, b in self.bgp.items():
@@ -199,8 +200,7 @@ class Router:
                     self.drop_route(r)
                     self.send_withdraw_route(r)
 
-            for i in to_del:
-                self.bgp_routing_table.pop(i)
+            del_from_list(self.bgp_routing_table, to_del)
 
     def main_thread(self):
         bgps_in_error_state = {}

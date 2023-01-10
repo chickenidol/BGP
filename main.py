@@ -2,10 +2,7 @@ import threading
 
 from examples import conf1, conf3, conf2
 
-
-
-
-conf2()
+conf3()
 
 def test_send():
     packet = IP(dst="8.8.8.8", ttl=20) / ICMP()

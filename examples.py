@@ -229,11 +229,14 @@ def conf3():
     c = 0
     while True:
         c += 1
-        if c == 20:
+        if c % 31 == 0:
             r3.off()
 
-        if c > 2000:
-            break
+        if c % 37 == 0:
+            r3.off()
+
+        if c % 53 == 0:
+            r3.off()
 
         sleep(1)
 

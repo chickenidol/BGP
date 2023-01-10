@@ -5,7 +5,7 @@ from random import randint
 from scapy.contrib.bgp import BGPHeader, BGPOpen, BGPUpdate, BGPPathAttr, BGPNLRI_IPv4, BGPPALocalPref, BGPKeepAlive, \
     BGPPANextHop, BGPPAAS4BytesPath, BGPPAASPath
 
-from tools import int_to_ip, netmask_to_bits, craft_bgp_update, ip_to_int, cidr_to_netmask
+from tools import int_to_ip, netmask_to_bits, craft_bgp_update, ip_to_int, cidr_to_netmask, debug_message
 
 
 class BGP:
@@ -25,7 +25,7 @@ class BGP:
         self.client_socket = None
 
         self.router = None
-        self.hold_time = 90
+        self.hold_time = 30
 
         self.container = []
         self.data_lock = threading.Lock()
@@ -46,28 +46,40 @@ class BGP:
                 if data:
                     if data.haslayer(BGPKeepAlive):
                         self.neighbour_keepalive = 0
-                        print(f"{self.my_ip} received KEEPALIVE")
+                        debug_message(3, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                                      "receive_thread",
+                                      f"Received KEEPALIVE from AS {self.neighbour_as} {self.neighbour_ip}.")
                     elif data.haslayer(BGPUpdate):
                         up_layer = data.getlayer(BGPUpdate)
-                        nlri = up_layer.nlri[0].prefix
-                        network = nlri.split('/')[0]
-                        mask = cidr_to_netmask(nlri.split('/')[1])
-                        as_path = []
 
-                        if up_layer.haslayer(BGPPAAS4BytesPath):
-                            segments = up_layer.getlayer(BGPPAAS4BytesPath).segments
 
-                            for s in segments:
-                                as_path.append(s.segment_value[0])
+                        if up_layer.withdrawn_routes:
+                            for i in range(len(up_layer.withdrawn_routes)):
+                                nlri = up_layer.withdrawn_routes[i].prefix
+                                network = nlri.split('/')[0]
+                                mask = cidr_to_netmask(nlri.split('/')[1])
 
-                            h = up_layer.getlayer(BGPPANextHop)
-                            next_hop = h.next_hop
+                                self.router.receive_withdraw_route(ip_to_int(network), ip_to_int(mask), self.neighbour_as)
 
-                            self.router.add_bgp_route(network, mask, next_hop, as_path)
+                        if up_layer.path_attr and len(up_layer.path_attr):
+                            debug_message(3, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                                          "receive_thread",
+                                          f"Received UPDATE from AS {self.neighbour_as} {self.neighbour_ip}.")
+                            nlri = up_layer.nlri[0].prefix
+                            network = nlri.split('/')[0]
+                            mask = cidr_to_netmask(nlri.split('/')[1])
+                            as_path = []
 
-                    # встречаем UPDATE, обрабатываем, дергаем callback роутера, передаем массив маршрутов
-                    # он который вносит данные в список BGP с блокировкой
+                            if up_layer.haslayer(BGPPAAS4BytesPath):
+                                segments = up_layer.getlayer(BGPPAAS4BytesPath).segments
 
+                                for s in segments:
+                                    as_path.append(s.segment_value[0])
+
+                                h = up_layer.getlayer(BGPPANextHop)
+                                next_hop = h.next_hop
+
+                                self.router.add_bgp_route(network, mask, next_hop, as_path, source=self.neighbour_as)
             sleep(0.1)
 
     def handshake(self):
@@ -93,6 +105,9 @@ class BGP:
         if client_socket.connect((self.neighbour_ip, 179)):
             return 1, client_socket
         else:
+            debug_message(3, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "handshake",
+                          f"TCP connection exceeded timeout. {self.my_ip}:random_free -> {self.neighbour_ip}:179")
+
             client_socket.close()
             return None, None
 
@@ -111,10 +126,26 @@ class BGP:
                 with self.data_lock:
                     self.container.append(bgp_update)
 
+    def withdraw_route(self, r):
+        hdr = BGPHeader(type=2, marker=0xffffffffffffffffffffffffffffffff)
+
+        network = int_to_ip(r.network)
+        mask = netmask_to_bits(int_to_ip(r.mask))
+        nlri = network + '/' + str(mask)
+        as_path = [self.my_as] + r.path
+        key = nlri + "_" + ' '.join(map(str, as_path))
+        if key in self.shared_routes:
+            #self.shared_routes[key] = (nlri, as_path)
+            bgp_update = hdr / BGPUpdate(withdrawn_routes_len=None, withdrawn_routes=[BGPNLRI_IPv4(prefix=nlri)])
+            with self.data_lock:
+                self.container.append(bgp_update)
+
     def add_shared_routes(self, routes):
         hdr = BGPHeader(type=2, marker=0xffffffffffffffffffffffffffffffff)
 
         for r in routes:
+            n = int_to_ip(r.network)
+            m = int_to_ip(r.mask)
             if self.my_as in r.path:
                 continue
 
@@ -123,9 +154,9 @@ class BGP:
 
             network = int_to_ip(r.network)
             mask = netmask_to_bits(int_to_ip(r.mask))
-            nlri = network + '/' + mask
+            nlri = network + '/' + str(mask)
             as_path = [self.my_as] + r.path
-            key = nlri + "_" + ' '.join(as_path)
+            key = nlri + "_" + ' '.join(map(str, as_path))
             if key not in self.shared_routes:
                 self.shared_routes[key] = (nlri, as_path)
                 bgp_update = hdr / craft_bgp_update('IGP', as_path, self.my_ip, nlri)
@@ -137,15 +168,31 @@ class BGP:
         client = 0
 
         # establish TCP connection
+        connect_tries = 0
+        debug_message(4, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "main_thread",
+                      f"Initialising TCP connection.")
         while self.state != 'ACTIVE' and self.state != 'IDLE':
             shake = self.handshake()
             if shake[1]:
                 self.state = 'ACTIVE'
                 client = shake[0]
                 self.working_socket = shake[1]
+                debug_message(3, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "main_thread",
+                              f"TCP connection initialised. {self.working_socket.src_ip}:{self.working_socket.sport} -> {self.working_socket.dst_ip}:{self.working_socket.dport}")
+                break
+
+            connect_tries += 1
+            if connect_tries > 3:
+                self.state = 'ERROR'
+                self.error_code = 5
+                debug_message(2, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "main_thread",
+                              f"Error 5. Unable to establish TCP connection after {connect_tries} tries.")
+                connect_tries = 0
                 break
         # establish BGP connection
         if self.state == 'ACTIVE':
+            debug_message(4, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "main_thread",
+                          f"Initialising BGP conversation.")
             hdr = BGPHeader(type=1, marker=0xffffffffffffffffffffffffffffffff)
             op = BGPOpen(my_as=self.my_as, hold_time=self.hold_time, bgp_id=self.my_ip)
 
@@ -179,16 +226,22 @@ class BGP:
                 else:
                     self.state = 'ERROR'
                     self.error_code = 2
-                    print(f"2. {self.my_ip} Wrong neighbour.")
+                    debug_message(2, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                                  "main_thread",
+                                  f"Error 2. Incorrect neighbour AS received.")
                     # send NOTIFICATION message
             else:
                 self.state = 'ERROR'
                 self.error_code = 1
-                print(f"1. {self.my_ip} Error receiving data.")
+                debug_message(2, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                              "main_thread",
+                              f"Error 1. Error receiving data.")
 
         th_receive = None
 
         if self.state == 'ESTABLISHED':
+            debug_message(3, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "main_thread",
+                          f"BGP conversation established.")
             # start recv threat
             th_receive = threading.Thread(target=self.receive_thread)
             th_receive.start()
@@ -206,13 +259,15 @@ class BGP:
                     if self.neighbour_keepalive > self.hold_time:
                         self.state = 'ERROR'
                         self.error_code = 4
-                        print(f'4. No keepalive from the neighbour. {self.my_ip}')
+                        debug_message(2, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                                      "main_thread",
+                                      f"Error 4. No keepalive from the neighbour.")
 
                     keepalive_timer += 1
                     self.neighbour_keepalive += 1
 
                 with self.data_lock:
-                    while len(self.container) > 0 and self.state != 'IDLE':
+                    while len(self.container) > 0:
                         data = self.container.pop(0)
                         self.working_socket.sendall(data)
 
@@ -220,7 +275,9 @@ class BGP:
         else:
             self.state = 'ERROR'
             self.error_code = 3
-            print(f'3. {self.my_ip} Error initialising BGP conversation.')
+            debug_message(2, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                          "main_thread",
+                          f"Error 3. Unable to initialise BGP conversation.")
 
         if self.working_socket:
             self.working_socket.close()
@@ -229,13 +286,34 @@ class BGP:
             th_receive.join()
 
     def on(self):
+        debug_message(5, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                      "on",
+                      f"Starting...")
         self.thmain = threading.Thread(target=self.main_thread)
         self.thmain.start()
+        debug_message(5, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                      "on",
+                      f"BGP instance started.")
 
     def off(self):
+        debug_message(5, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                      "off",
+                      f"Shutting down...")
+
         self.state = 'IDLE'
+        sleep(1)
+        self.state = 'IDLE'
+
         self.thmain.join()
+
+        debug_message(5, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                      "off",
+                      f"Shut down.")
+
+
+
         self.working_socket = None
         self.client_socket = None
         self.server_socket = None
+        self.shared_routes = {}
 

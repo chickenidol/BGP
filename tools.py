@@ -1,11 +1,13 @@
 import ipaddress
+import threading
+
 from netaddr import IPAddress
 from scapy.contrib.bgp import BGPPAAS4BytesPath, BGPPathAttr, BGPPALocalPref, BGPUpdate, BGPNLRI_IPv4, BGPPAOrigin, \
     BGPPANextHop, BGPPAMultiExitDisc
 
 
 def netmask_to_bits(mask):
-    return IPAddress('255.255.255.0').netmask_bits()
+    return IPAddress(mask).netmask_bits()
 
 
 def ip_to_int(address):
@@ -53,3 +55,13 @@ def craft_bgp_update(origin, as_path, next_hop, nlri):
     )
 
     return bgp_update
+
+
+debug_print_lock = threading.Lock()
+debug_level = 5
+
+
+def debug_message(severity, source, procedure, message):
+    with debug_print_lock:
+        if severity <= debug_level:
+            print(f'[{severity}]', source + '.', message)

@@ -3,6 +3,9 @@ from time import sleep
 from random import randint
 import threading
 
+from tools import debug_message
+
+
 def craft_tcp(src_ip, dst_ip, sport, dport, seq_num, ack_num, flags=''):
     packet = IP(src=src_ip, dst=dst_ip, ttl=20) / TCP(
         sport=sport,
@@ -84,12 +87,12 @@ class Sock:
 
         return None, None
 
-    def connect(self, dst, timeout=10):
+    def connect(self, dst, timeout=5):
         if self.state != 'IDLE':
             return False
 
         if timeout < 1 or timeout > 120:
-            timeout = 10
+            timeout = 5
 
         self.dst_ip = dst[0]
         self.dport = dst[1]
@@ -110,15 +113,13 @@ class Sock:
 
                 sleep(1)
 
-            print(f'{self.src_ip} Connection timeout')
-
             self.close()
 
         return False
 
     def close(self):
         # send rst to a neighbour if there is one
-        if self.state == 'SYN-SENT' or self.state == 'SYN-RECEIVED' or self.state == 'ESTABLISHED':
+        if self.state == 'SYN-RECEIVED' or self.state == 'ESTABLISHED':
             packet_rst = craft_tcp(self.src_ip, self.dst_ip, self.sport, self.dport, self.seq_num, 0, 'R')
             self.os.send_data(packet_rst)
 
@@ -149,7 +150,7 @@ class Sock:
 
         if self.state == 'LISTEN':
             if packet[TCP].flags == 'S':
-                self.seq_num = randint(1, 2 ** 30)
+                self.seq_num = randint(1, 2 ** 29)
 
                 self.dst_ip = packet[IP].src
                 self.dport = packet[TCP].sport

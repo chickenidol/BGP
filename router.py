@@ -69,7 +69,6 @@ class Router:
     def add_interface(self, i):
         i.install(self)
         self.interfaces[i.ip] = i
-        self.routing_table.append(Route(i.ip, i.mask, '0.0.0.0', 'C', i.ip, 0))
 
     def get_port(self, src_ip, src_port, sock):
         if src_ip not in self.interfaces:
@@ -118,10 +117,16 @@ class Router:
                             s.receive_data(packet)
 
     def on(self):
+        if self.state != 0:
+            return
+
         debug_message(5, f"Router {self.name}", "on", "Starting...")
+        self.clear_storage()
+
         self.state = 1
 
         for key, i in self.interfaces.items():
+            self.routing_table.append(Route(i.ip, i.mask, '0.0.0.0', 'C', i.ip, 0))
             i.on()
 
         debug_message(5, f"Router {self.name}", "on", "Interfaces started.")
@@ -264,7 +269,15 @@ class Router:
         # determine interface by using routing table
         # send data
 
+    def clear_storage(self):
+        self.sockets = {}
+        self.routing_table = []
+        self.bgp_routing_table = []
+
     def off(self):
+        if self.state == 0:
+            return
+
         self.state = 0
         debug_message(5, f"Router {self.name}", "off", "Shutting down...")
 
@@ -280,6 +293,6 @@ class Router:
 
         debug_message(5, f"Router {self.name}", "off", "Interfaces disabled.")
 
-        self.th_main_thread.join()
+        self.clear_storage()
 
         debug_message(5, f"Router {self.name}", "off", "Router shut down.")

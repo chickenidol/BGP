@@ -113,6 +113,8 @@ class BGP:
 
     def add_internal_routes(self, routes):
         hdr = BGPHeader(type=2, marker=0xffffffffffffffffffffffffffffffff)
+        #if self.neighbour_as == 503:
+        #    print(f'\n{self.my_as} add_internal_routes1 {len(routes)}\n')
 
         for r in routes:
             network = int_to_ip(r[0])
@@ -120,11 +122,19 @@ class BGP:
             nlri = network + '/' + mask
             as_path = [self.my_as]
             key = nlri + "_" + ' '.join(map(str, as_path))
+            #if self.neighbour_as == 503:
+                #if key in self.shared_routes:
+                #    print(f'\n{self.my_as} add_internal_routes1.1 {len(routes)} {key} {len(self.shared_routes)} IN\n')
+                #else:
+                #    print(f'\n{self.my_as} add_internal_routes1.1 {len(routes)} {key} {len(self.shared_routes)} NOT IN\n')
             if key not in self.shared_routes:
                 self.shared_routes[key] = (nlri, as_path)
                 bgp_update = hdr / craft_bgp_update('IGP', as_path, self.my_ip, nlri)
                 with self.data_lock:
+                    #if self.neighbour_as == 503:
+                    #    print(f'\n{self.my_as} add_internal_routes2\n')
                     self.container.append(bgp_update)
+
 
     def withdraw_route(self, r):
         hdr = BGPHeader(type=2, marker=0xffffffffffffffffffffffffffffffff)

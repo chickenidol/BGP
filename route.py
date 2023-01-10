@@ -20,8 +20,3 @@ class Route:
 
         if bgp_route and self.source == 'B':
             self.bgp_route = bgp_route
-
-    def if_ip_in(self, ip):
-        if (ip & self.mask) == self.network:
-            return True
-        return False

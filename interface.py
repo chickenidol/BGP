@@ -5,42 +5,26 @@ from scapy.layers.l2 import ARP
 from scapy.layers.inet import IP, ICMP, Ether
 from scapy.all import *
 
+from tools import export_scapy
+
 
 class Interface:
     def __init__(self, ip, mask):
-        self.device = None
+        self.__router = None
+        self.__wire = None
+        self.__arp_table = {}
+        self.__cache = []
+        self.__th_main = None
+
         self.mac = "02:00:00:%02x:%02x:%02x" % (random.randint(0, 255),
-                             random.randint(0, 255),
-                             random.randint(0, 255))
+                                                random.randint(0, 255),
+                                                random.randint(0, 255))
         self.ip = ip
         self.mask = mask
         self.state = 0
-        self.wire = None
-        self.arp_table = {}
-        self.cache = []
-        self.t_thread = None
 
-    def install(self, d):
-        self.device = d
-
-    def connect_wire(self, w):
-        self.wire = w
-
-    def export_scapy(self, obj):
-        import zlib
-        return bytes_base64(zlib.compress(six.moves.cPickle.dumps(obj, 2), 9))
-
-    def send_data(self, packet):
-        if packet.dst not in self.arp_table:
-            arp = Ether(src=self.mac, dst=ETHER_BROADCAST) / ARP(op=1, hwsrc=self.mac, psrc=self.ip, pdst=packet.dst)
-            self.wire.push(arp)
-            self.cache.append(self.export_scapy(packet))
-        else:
-            full_packet = Ether(src=self.mac, dst=self.arp_table[packet.dst]) / packet
-            self.wire.push(full_packet)
-
-    def automate(self):
-        packet = self.wire.pop(self.mac)
+    def __automate(self):
+        packet = self.__wire.pop(self.mac)
 
         if packet:
             if packet.haslayer(ARP):
@@ -48,37 +32,53 @@ class Interface:
                     if packet.pdst == self.ip:
                         reply = ARP(op=2, hwsrc=self.mac, psrc=self.ip, pdst=packet[ARP].psrc, hwdst=packet[ARP].hwsrc)
                         full_packet = Ether(dst=packet[ARP].hwsrc, src=self.mac) / reply
-                        self.wire.push(full_packet)
+                        self.__wire.push(full_packet)
                 elif packet[ARP].op == 2:
-                    self.arp_table[packet[ARP].psrc] = packet[ARP].hwsrc
+                    self.__arp_table[packet[ARP].psrc] = packet[ARP].hwsrc
 
             else:
-                self.device.receive_data(self, packet)
+                self.__router.receive_data(self, packet)
 
-        # iterate through cache, send stored packets
+        # iterate through __cache, send stored packets
         tmp = []
-        for i in range(len(self.cache)):
-            packet = import_object(self.cache[i])
-            if packet['IP'].dst in self.arp_table:
-                full_packet = Ether(src=self.mac, dst=self.arp_table[packet.dst]) / packet
-                self.wire.push(full_packet)
+        for i in range(len(self.__cache)):
+            packet = self.__cache[i]
+            if packet['IP'].dst in self.__arp_table:
+                full_packet = Ether(src=self.mac, dst=self.__arp_table[packet.dst]) / packet
+                self.__wire.push(full_packet)
             else:
-                tmp.append(self.cache[i])
-        self.cache = tmp
+                tmp.append(self.__cache[i])
+        self.__cache = tmp
 
-    def main_thread(self):
+    def __main_thread(self):
         while self.state:
-            if not self.wire:
+            if not self.__wire:
                 sleep(2)
                 continue
 
-            self.automate()
+            self.__automate()
             sleep(0.1)
 
     def on(self):
         self.state = 1
-        self.t_thread = threading.Thread(target=self.main_thread)
-        self.t_thread.start()
+        self.__th_main = threading.Thread(target=self.__main_thread)
+        self.__th_main.start()
 
     def off(self):
         self.state = 0
+        self.__th_main.join()
+
+    def install(self, d):
+        self.__router = d
+
+    def connect_wire(self, w):
+        self.__wire = w
+
+    def send_data(self, packet):
+        if packet.dst not in self.__arp_table:
+            arp = Ether(src=self.mac, dst=ETHER_BROADCAST) / ARP(op=1, hwsrc=self.mac, psrc=self.ip, pdst=packet.dst)
+            self.__wire.push(arp)
+            self.__cache.append(packet)
+        else:
+            full_packet = Ether(src=self.mac, dst=self.__arp_table[packet.dst]) / packet
+            self.__wire.push(full_packet)

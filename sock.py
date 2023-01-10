@@ -3,21 +3,11 @@ from time import sleep
 from random import randint
 import threading
 
-from tools import debug_message
-
-
-def craft_tcp(src_ip, dst_ip, sport, dport, seq_num, ack_num, flags=''):
-    packet = IP(src=src_ip, dst=dst_ip, ttl=20) / TCP(
-        sport=sport,
-        dport=dport,
-        flags=flags,
-        seq=seq_num,
-        ack=ack_num)
-    return packet
+from tools import debug_message, craft_tcp
 
 
 class Sock:
-    def __init__(self, os):
+    def __init__(self, router):
         self.sport = 0
         self.dport = 0
 
@@ -28,12 +18,13 @@ class Sock:
         self.ack_num = 0
         # LISTEN, SYN-SENT, SYN-RECEIVED, ESTABLISHED, CLOSING, CLOSED
         self.state = 'IDLE'
-        self.os = os
 
-        self.container = []
-        self.data_lock = threading.Lock()
+        self.__router = router
 
-        self.port_acquired = False
+        self.__container = []
+        self.__data_lock = threading.Lock()
+
+        self.__port_acquired = False
 
     # params ((src_host, src_port))
     def bind(self, params):
@@ -48,9 +39,9 @@ class Sock:
         data = None
 
         while self.state != 'IDLE':
-            with self.data_lock:
-                if len(self.container) > 0:
-                    data = self.container.pop(0)
+            with self.__data_lock:
+                if len(self.__container) > 0:
+                    data = self.__container.pop(0)
                     break
             sleep(0.1)
 
@@ -60,7 +51,7 @@ class Sock:
     def sendall(self, data):
         packet = craft_tcp(self.src_ip, self.dst_ip, self.sport, self.dport, self.seq_num, self.ack_num, '')
         packet = packet / data
-        self.os.send_data(packet)
+        self.__router.send_data(packet)
         self.seq_num += len(packet[TCP].payload)
 
     # listen before syn comes
@@ -68,10 +59,10 @@ class Sock:
         if self.state != 'IDLE':
             return False
 
-        b_port = self.os.get_port(self.src_ip, self.sport, self)
+        b_port = self.__router.get_port(self.src_ip, self.sport, self)
         if b_port:
             self.state = 'LISTEN'
-            self.port_acquired = True
+            self.__port_acquired = True
 
         return b_port
 
@@ -97,12 +88,12 @@ class Sock:
         self.dst_ip = dst[0]
         self.dport = dst[1]
 
-        if self.os.get_port(self.src_ip, self.sport, self):
-            self.port_acquired = True
+        if self.__router.get_port(self.src_ip, self.sport, self):
+            self.__port_acquired = True
             self.seq_num = randint(1, (2 ^ 32) - 1)
 
             packet_syn = craft_tcp(self.src_ip, self.dst_ip, self.sport, self.dport, self.seq_num, 0, 'S')
-            self.os.send_data(packet_syn)
+            self.__router.send_data(packet_syn)
             self.seq_num += 1
             self.state = 'SYN-SENT'
 
@@ -121,12 +112,12 @@ class Sock:
         # send rst to a neighbour if there is one
         if self.state == 'SYN-RECEIVED' or self.state == 'ESTABLISHED':
             packet_rst = craft_tcp(self.src_ip, self.dst_ip, self.sport, self.dport, self.seq_num, 0, 'R')
-            self.os.send_data(packet_rst)
+            self.__router.send_data(packet_rst)
 
         self.state = 'IDLE'
 
-        if self.port_acquired:
-            self.os.release_port(self.src_ip, self.sport, self)
+        if self.__port_acquired:
+            self.__router.release_port(self.src_ip, self.sport, self)
 
     # callback
     def receive_data(self, packet):
@@ -143,8 +134,8 @@ class Sock:
                 if packet[IP].src == self.dst_ip and \
                         packet[TCP].sport == self.dport and \
                         packet[TCP].ack == self.seq_num:
-                    with self.data_lock:
-                        self.container.append(packet[TCP].payload)
+                    with self.__data_lock:
+                        self.__container.append(packet[TCP].payload)
                         # change ack
                         self.ack_num += len(packet[TCP].payload)
 
@@ -156,7 +147,7 @@ class Sock:
                 self.dport = packet[TCP].sport
                 self.ack_num = packet[TCP].seq + 1
                 packet_syn_ack = craft_tcp(self.src_ip, self.dst_ip, self.sport, self.dport, self.seq_num, self.ack_num, 'SA')
-                self.os.send_data(packet_syn_ack)
+                self.__router.send_data(packet_syn_ack)
                 self.seq_num += 1
                 self.state = 'SYN-RECEIVED'
         elif self.state == 'SYN-RECEIVED':
@@ -173,8 +164,8 @@ class Sock:
                     self.ack_num = packet[TCP].seq + 1
                     packet_ack = craft_tcp(self.src_ip, self.dst_ip, self.sport, self.dport, self.seq_num,
                                                 self.ack_num, 'A')
-                    self.os.send_data(packet_ack)
+                    self.__router.send_data(packet_ack)
                     self.state = 'ESTABLISHED'
                 else:
                     packet_rst = craft_tcp(self.src_ip, self.dst_ip, self.sport, self.dport, self.seq_num, 0, 'R')
-                    self.os.send_data(packet_rst)
+                    self.__router.send_data(packet_rst)

@@ -44,7 +44,7 @@ class BGP:
                 data = self.__working_socket.recv()
                 if data:
                     if data.haslayer(BGPKeepAlive):
-                        debug_message(3, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                        debug_message(4, f"BGP AS {self.my_as}, IP {self.my_ip},    Neighbour {self.neighbour_as}",
                                       "receive_thread",
                                       f"Received KEEPALIVE from AS {self.neighbour_as} {self.neighbour_ip} after {self.__neighbour_keepalive} sec.")
                         self.__neighbour_keepalive = 0
@@ -60,7 +60,7 @@ class BGP:
 
                                 self.__router.receive_withdraw_route(ip_to_int(network), ip_to_int(mask), self.neighbour_as)
 
-                            debug_message(3, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                            debug_message(3, f"BGP AS {self.my_as}, IP {self.my_ip},    Neighbour {self.neighbour_as}",
                                           "receive_thread",
                                           f"Received UPDATE WITHDRAW from AS {self.neighbour_as} {self.neighbour_ip}. Withdrawn: {n_routes_withdrawn}")
 
@@ -84,7 +84,7 @@ class BGP:
                                 next_hop = h.next_hop
 
                                 self.__router.add_bgp_route(network, mask, next_hop, as_path, source=self.neighbour_as)
-
+            sleep(0.001)
 
     def __handshake(self):
         server_socket = Sock(self.__router)
@@ -109,7 +109,7 @@ class BGP:
         if client_socket.connect((self.neighbour_ip, 179)):
             return 1, client_socket
         else:
-            debug_message(4, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "handshake",
+            debug_message(4, f"BGP AS {self.my_as}, IP {self.my_ip},    Neighbour {self.neighbour_as}", "handshake",
                           f"TCP connection exceeded timeout. {self.my_ip}:random_free -> {self.neighbour_ip}:179")
 
             client_socket.close()
@@ -121,7 +121,7 @@ class BGP:
 
         # establish TCP connection
         connect_tries = 0
-        debug_message(4, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "main_thread",
+        debug_message(4, f"BGP AS {self.my_as}, IP {self.my_ip},    Neighbour {self.neighbour_as}", "main_thread",
                       f"Initialising TCP connection.")
         while self.state != 'ACTIVE' and self.state != 'IDLE':
             shake = self.__handshake()
@@ -129,7 +129,7 @@ class BGP:
                 self.state = 'ACTIVE'
                 client = shake[0]
                 self.__working_socket = shake[1]
-                debug_message(3, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "main_thread",
+                debug_message(4, f"BGP AS {self.my_as}, IP {self.my_ip},    Neighbour {self.neighbour_as}", "main_thread",
                               f"TCP connection initialised. {self.__working_socket.src_ip}:{self.__working_socket.sport} -> {self.__working_socket.dst_ip}:{self.__working_socket.dport}")
                 break
 
@@ -137,13 +137,13 @@ class BGP:
             if connect_tries > 3:
                 self.state = 'ERROR'
                 self.error_code = 5
-                debug_message(2, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "main_thread",
+                debug_message(2, f"BGP AS {self.my_as}, IP {self.my_ip},    Neighbour {self.neighbour_as}", "main_thread",
                               f"Error 5. Unable to establish TCP connection after {connect_tries} tries.")
                 connect_tries = 0
                 break
         # establish BGP connection
         if self.state == 'ACTIVE':
-            debug_message(4, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "main_thread",
+            debug_message(4, f"BGP AS {self.my_as}, IP {self.my_ip},    Neighbour {self.neighbour_as}", "main_thread",
                           f"Initialising BGP conversation.")
             hdr = BGPHeader(type=1, marker=0xffffffffffffffffffffffffffffffff)
             op = BGPOpen(my_as=self.my_as, hold_time=self.hold_time, bgp_id=self.my_ip)
@@ -178,21 +178,21 @@ class BGP:
                 else:
                     self.state = 'ERROR'
                     self.error_code = 2
-                    debug_message(2, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                    debug_message(2, f"BGP AS {self.my_as}, IP {self.my_ip},    Neighbour {self.neighbour_as}",
                                   "main_thread",
                                   f"Error 2. Incorrect neighbour AS received.")
                     # send NOTIFICATION message
             else:
                 self.state = 'ERROR'
                 self.error_code = 1
-                debug_message(2, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}",
+                debug_message(2, f"BGP AS {self.my_as}, IP {self.my_ip},    Neighbour {self.neighbour_as}",
                               "main_thread",
                               f"Error 1. Error receiving data. {data}")
 
         th_receive = None
 
         if self.state == 'ESTABLISHED':
-            debug_message(3, f"BGP AS {self.my_as}, IP {self.my_ip}, Neighbour {self.neighbour_as}", "main_thread",
+            debug_message(4, f"BGP AS {self.my_as}, IP {self.my_ip},    Neighbour {self.neighbour_as}", "main_thread",
                           f"BGP conversation established.")
             # start recv threat
             th_receive = threading.Thread(target=self.__receive_thread)

@@ -350,3 +350,77 @@ def conf5():
             r502.off()
 
         sleep(1)
+
+
+def conf6():
+    # Routers
+    r501 = Router(501)
+    r502 = Router(502)
+    r503 = Router(503)
+    r504 = Router(504)
+    r505 = Router(505)
+    r506 = Router(506)
+    r507 = Router(507)
+    r508 = Router(508)
+    r509 = Router(509)
+    r510 = Router(510)
+    r511 = Router(511)
+    r512 = Router(512)
+
+    add_announced_network(r501, '10.0.0.0/16')
+    add_announced_network(r502, '20.0.0.0/16')
+    add_announced_network(r503, '30.0.0.0/16')
+    add_announced_network(r504, '40.0.0.0/16')
+    add_announced_network(r505, '50.0.0.0/16')
+    add_announced_network(r506, '61.0.0.0/16')
+    add_announced_network(r506, '62.0.0.0/16')
+    add_announced_network(r507, '70.0.0.0/16')
+    add_announced_network(r508, '80.0.0.0/16')
+    add_announced_network(r509, '90.0.0.0/16')
+    add_announced_network(r510, '100.0.0.0/16')
+    add_announced_network(r511, '110.0.0.0/16')
+
+    add_announced_network(r512, '120.0.0.0/16')
+    add_announced_network(r512, '121.0.0.0/16')
+    add_announced_network(r512, '122.0.0.0/16')
+    add_announced_network(r512, '123.0.0.0/16')
+
+    connect_bgp_routers('172.16.1.1/30', '172.16.1.2/30', r501, r502)
+    connect_bgp_routers('172.16.2.1/30', '172.16.2.2/30', r502, r503)
+    connect_bgp_routers('172.16.4.1/30', '172.16.4.2/30', r502, r504)
+    connect_bgp_routers('172.16.5.1/30', '172.16.5.2/30', r501, r504)
+    connect_bgp_routers('172.16.6.1/30', '172.16.6.2/30', r505, r501)
+
+    connect_bgp_routers('172.16.7.1/30', '172.16.7.2/30', r505, r506)
+    connect_bgp_routers('172.16.8.1/30', '172.16.8.2/30', r504, r503)
+    connect_bgp_routers('172.16.9.1/30', '172.16.9.2/30', r502, r506)
+
+    connect_bgp_routers('172.16.10.1/30', '172.16.10.2/30', r507, r508)
+    connect_bgp_routers('172.16.11.1/30', '172.16.11.2/30', r507, r509)
+    connect_bgp_routers('172.16.12.1/30', '172.16.12.2/30', r507, r510)
+    connect_bgp_routers('172.16.13.1/30', '172.16.13.2/30', r507, r511)
+    connect_bgp_routers('172.16.14.1/30', '172.16.14.2/30', r507, r512)
+    connect_bgp_routers('172.16.15.1/30', '172.16.15.2/30', r507, r506)
+    connect_bgp_routers('172.16.16.1/30', '172.16.16.2/30', r511, r506)
+
+    # Start the routers
+    r501.on()
+    r502.on()
+    r503.on()
+    r504.on()
+    r505.on()
+    r506.on()
+    r507.on()
+    r508.on()
+    r509.on()
+    r510.on()
+    r511.on()
+    r512.on()
+
+    c = 0
+    while True:
+        c += 1
+        #if c == 100:
+        #    r502.off()
+
+        sleep(10)

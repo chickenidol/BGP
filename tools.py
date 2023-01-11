@@ -90,7 +90,7 @@ def ip_in_network(network, mask, ip):
 
 
 debug_print_lock = threading.Lock()
-debug_level = 4
+debug_level = 3
 
 
 def debug_message(severity, source, procedure, message):

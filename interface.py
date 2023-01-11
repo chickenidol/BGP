@@ -58,6 +58,8 @@ class Interface:
                     tmp.append(self.__cache[i])
             self.__cache = tmp
 
+            sleep(0.001)
+
     def on(self):
         self.state = 1
         self.__th_main = threading.Thread(target=self.__main_thread)

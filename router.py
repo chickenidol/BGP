@@ -22,6 +22,10 @@ class Router:
         self.__bgp_routing_table = []
         self.__propagated_bgp_networks = []
 
+        self.__ping_lock = threading.Lock()
+        self.__ping_received = False
+        self.__ping_data = None
+
         self.name = name
 
         if not name:
@@ -29,6 +33,7 @@ class Router:
 
         self.as_id = as_id
         self.state = 0
+
 
     def __get_route(self, ip):
         if isinstance(ip, str):
@@ -172,6 +177,10 @@ class Router:
 
             sleep(10)
 
+    def __print_route(self, route):
+        if route:
+            print(f'Network: {int_to_ip(route.network)}, Mask: {int_to_ip(route.mask)}, Gw: {int_to_ip(route.gw)},Int: {int_to_ip(route.interface)}')
+
     def __clear_storage(self):
         self.__sockets = {}
         self.__routing_table = []
@@ -222,9 +231,10 @@ class Router:
             src_ip = packet[IP].src
             dst_ip = packet[IP].dst
 
-            if dst_ip != i.ip:
-                # determine a route, send the packet
-                print("got routing packet")
+            if dst_ip not in self.__interfaces:
+                self.send_data(packet)
+                debug_message(5, f"Router {self.name}", "receive_data",
+                              f"Router got a packet to route, dst: {dst_ip}")
             else:
                 if packet.haslayer(TCP):
                     dport = packet[TCP].dport
@@ -232,6 +242,22 @@ class Router:
                         if dport in self.__sockets[dst_ip]:
                             s = self.__sockets[dst_ip][dport]
                             s.receive_data(packet)
+                else:
+                    if packet.haslayer(ICMP):
+                        icmp = packet.getlayer(ICMP)
+                        # request
+                        if icmp.type == 8:
+                            answer = IP(src=packet[IP].dst, dst=packet[IP].src, ttl=20) / ICMP(type="echo-reply",
+                                                                                               code=0)
+                            self.send_data(answer)
+                            debug_message(5, f"Router {self.name}", "receive_data",
+                                          f"Router got ICMP request packet from {packet[IP].dst}, answering...")
+                        # response
+                        elif icmp.type == 0:
+                            with self.__ping_lock:
+                                if not self.__ping_received:
+                                    self.__ping_received = True
+                                    self.__ping_data = packet
 
     def on(self):
         if self.state != 0:
@@ -276,11 +302,21 @@ class Router:
             del_from_list(self.__bgp_routing_table, to_del)
 
     def send_data(self, packet):
-        if packet[IP].src in self.__interfaces:
-            self.__interfaces[packet[IP].src].send_data(packet)
-        # check TTL
-        # determine interface by using routing table
-        # send data
+        route = self.__get_route(packet[IP].dst)
+        #self.__print_route(route)
+        if route:
+            if route.interface != 0:
+                self.__interfaces[int_to_ip(route.interface)].send_data(packet)
+            else:
+                route_to_gw = self.__get_route(route.gw)
+                if route_to_gw.interface != 0:
+                    self.__interfaces[int_to_ip(route_to_gw.interface)].send_data(packet, int_to_ip(route.gw))
+                else:
+                    debug_message(3, f"Router {self.name}", "send_data",
+                                  f"No route to host {packet.gw}")
+        else:
+            debug_message(3, f"Router {self.name}", "send_data",
+                          f"No route to host {packet.dst}")
 
     def off(self):
         if self.state == 0:
@@ -301,3 +337,41 @@ class Router:
         self.__clear_storage()
 
         debug_message(5, f"Router {self.name}", "off", "Router shut down.")
+
+    def get_interfaces(self):
+        return self.__interfaces.keys()
+
+    def ping(self, dst_ip, src_ip=None):
+        if len(self.__interfaces) == 0:
+            return 'No interfaces'
+
+        if not src_ip or src_ip not in self.__interfaces:
+            src_ip = list(self.__interfaces.keys())[0]
+        msg = f'Ping sent from {src_ip} to {dst_ip} ... '
+
+        with self.__ping_lock:
+            self.__ping_received = False
+            self.__ping_data = None
+            packet = IP(src=src_ip, dst=dst_ip, ttl=20) / ICMP()
+            self.send_data(packet)
+
+        debug_message(5, f"Router {self.name}", "ping", f"Sending ping from {src_ip} to {dst_ip}")
+
+        timeout = 10
+        while timeout > 0 and not self.__ping_received:
+            timeout -= 1
+            sleep(1)
+
+        with self.__ping_lock:
+            if self.__ping_received:
+                packet = self.__ping_data
+                msg += f'answer received from {packet[IP].src}.'
+                self.__ping_received = False
+                self.__ping_data = None
+            else:
+                msg += 'no answer after 10 seconds'
+
+        return msg
+
+
+

@@ -5,7 +5,7 @@ import scapy.all as scapy
 from scapy.layers.inet import IP, ICMP, Ether
 from scapy.layers.l2 import ARP
 from router import Router
-from tools import cidr_to_netmask
+from tools import cidr_to_netmask, ip_to_int, int_to_ip, debug_message
 from wire import Wire
 from interface import Interface
 from bgp import BGP
@@ -38,7 +38,7 @@ def add_announced_network(r1, nlri):
 
     i1 = Interface(network, mask)
     r1.add_interface(i1)
-    r1.add_bgp_network(network, mask)
+    r1.add_bgp_network(int_to_ip(ip_to_int(network) & ip_to_int(mask)), mask)
 
 
 # two routers, the simplest configuration
@@ -287,10 +287,10 @@ def conf4():
     connect_bgp_routers('172.16.3.1/30', '172.16.3.2/30', r503, r504)
     connect_bgp_routers('172.16.4.1/30', '172.16.4.2/30', r501, r504)
 
-    add_announced_network(r501, '10.0.0.0/16')
-    add_announced_network(r502, '20.0.0.0/16')
-    add_announced_network(r503, '30.0.0.0/16')
-    add_announced_network(r504, '40.0.0.0/16')
+    add_announced_network(r501, '10.0.0.254/16')
+    add_announced_network(r502, '20.0.0.254/16')
+    add_announced_network(r503, '30.0.0.254/16')
+    add_announced_network(r504, '40.0.0.254/16')
 
     # Start the routers
     r501.on()
@@ -326,14 +326,14 @@ def conf5():
     connect_bgp_routers('172.16.8.1/30', '172.16.8.2/30', r504, r503)
     connect_bgp_routers('172.16.9.1/30', '172.16.9.2/30', r502, r506)
 
-    add_announced_network(r501, '10.0.0.0/16')
-    add_announced_network(r502, '20.0.0.0/16')
-    add_announced_network(r503, '30.0.0.0/16')
-    add_announced_network(r504, '40.0.0.0/16')
-    add_announced_network(r505, '50.0.0.0/16')
+    add_announced_network(r501, '10.0.0.254/16')
+    add_announced_network(r502, '20.0.0.254/16')
+    add_announced_network(r503, '30.0.0.254/16')
+    add_announced_network(r504, '40.0.0.254/16')
+    add_announced_network(r505, '50.0.0.254/16')
 
-    add_announced_network(r506, '61.0.0.0/16')
-    add_announced_network(r506, '62.0.0.0/16')
+    add_announced_network(r506, '61.0.0.254/16')
+    add_announced_network(r506, '62.0.0.254/16')
 
     # Start the routers
     r501.on()
@@ -367,23 +367,23 @@ def conf6():
     r511 = Router(511)
     r512 = Router(512)
 
-    add_announced_network(r501, '10.0.0.0/16')
-    add_announced_network(r502, '20.0.0.0/16')
-    add_announced_network(r503, '30.0.0.0/16')
-    add_announced_network(r504, '40.0.0.0/16')
-    add_announced_network(r505, '50.0.0.0/16')
-    add_announced_network(r506, '61.0.0.0/16')
-    add_announced_network(r506, '62.0.0.0/16')
-    add_announced_network(r507, '70.0.0.0/16')
-    add_announced_network(r508, '80.0.0.0/16')
-    add_announced_network(r509, '90.0.0.0/16')
-    add_announced_network(r510, '100.0.0.0/16')
-    add_announced_network(r511, '110.0.0.0/16')
+    add_announced_network(r501, '10.0.0.254/16')
+    add_announced_network(r502, '20.0.0.254/16')
+    add_announced_network(r503, '30.0.0.254/16')
+    add_announced_network(r504, '40.0.0.254/16')
+    add_announced_network(r505, '50.0.0.254/16')
+    add_announced_network(r506, '61.0.0.254/16')
+    add_announced_network(r506, '62.0.0.254/16')
+    add_announced_network(r507, '70.0.0.254/16')
+    add_announced_network(r508, '80.0.0.254/16')
+    add_announced_network(r509, '90.0.0.254/16')
+    add_announced_network(r510, '100.0.0.254/16')
+    add_announced_network(r511, '110.0.0.254/16')
 
-    add_announced_network(r512, '120.0.0.0/16')
-    add_announced_network(r512, '121.0.0.0/16')
-    add_announced_network(r512, '122.0.0.0/16')
-    add_announced_network(r512, '123.0.0.0/16')
+    add_announced_network(r512, '120.0.0.254/16')
+    add_announced_network(r512, '121.0.0.254/16')
+    add_announced_network(r512, '122.0.0.254/16')
+    add_announced_network(r512, '123.0.0.254/16')
 
     connect_bgp_routers('172.16.1.1/30', '172.16.1.2/30', r501, r502)
     connect_bgp_routers('172.16.2.1/30', '172.16.2.2/30', r502, r503)
@@ -420,7 +420,134 @@ def conf6():
     c = 0
     while True:
         c += 1
+
+
         #if c == 100:
         #    r502.off()
 
         sleep(10)
+
+
+
+
+# two routers pinging each other
+def conf7():
+    r501 = Router(501)
+    r502 = Router(502)
+    connect_bgp_routers('172.16.1.1/30', '172.16.1.2/30', r501, r502)
+    add_announced_network(r501, '10.0.0.254/16')
+    add_announced_network(r502, '20.0.0.254/16')
+
+    r501.on()
+    r502.on()
+
+    c = 0
+    while True:
+        c += 1
+
+        if c % 10 == 0:
+            debug_message(1, 'r501', 'conf7', r501.ping('20.0.0.254', '10.0.0.254'))
+
+        sleep(1)
+
+
+# two routers pinging each other through a medium BGP router 502
+def conf8():
+    r501 = Router(501)
+    r502 = Router(502)
+    r503 = Router(503)
+
+    connect_bgp_routers('172.16.1.1/30', '172.16.1.2/30', r501, r502)
+    connect_bgp_routers('172.16.2.1/30', '172.16.2.2/30', r502, r503)
+
+    add_announced_network(r501, '10.0.0.254/16')
+    add_announced_network(r502, '20.0.0.254/16')
+    add_announced_network(r503, '30.0.0.254/16')
+
+    r501.on()
+    r502.on()
+    r503.on()
+
+    c = 0
+    while True:
+        c += 1
+        if c % 10 == 0:
+            debug_message(1, 'r501', 'conf8', r501.ping('30.0.0.254', '10.0.0.254'))
+
+        sleep(1)
+def conf9():
+    # Routers
+    r501 = Router(501)
+    r502 = Router(502)
+    r503 = Router(503)
+    r504 = Router(504)
+    r505 = Router(505)
+    r506 = Router(506)
+    r507 = Router(507)
+    r508 = Router(508)
+    r509 = Router(509)
+    r510 = Router(510)
+    r511 = Router(511)
+    r512 = Router(512)
+
+    add_announced_network(r501, '10.0.0.254/16')
+    add_announced_network(r502, '20.0.0.254/16')
+    add_announced_network(r503, '30.0.0.254/16')
+    add_announced_network(r504, '40.0.0.254/16')
+    add_announced_network(r505, '50.0.0.254/16')
+    add_announced_network(r506, '61.0.0.254/16')
+    add_announced_network(r506, '62.0.0.254/16')
+    add_announced_network(r507, '70.0.0.254/16')
+    add_announced_network(r508, '80.0.0.254/16')
+    add_announced_network(r509, '90.0.0.254/16')
+    add_announced_network(r510, '100.0.0.254/16')
+    add_announced_network(r511, '110.0.0.254/16')
+
+    add_announced_network(r512, '120.0.0.254/16')
+    add_announced_network(r512, '121.0.0.254/16')
+    add_announced_network(r512, '122.0.0.254/16')
+    add_announced_network(r512, '123.0.0.254/16')
+
+    connect_bgp_routers('172.16.1.1/30', '172.16.1.2/30', r501, r502)
+    connect_bgp_routers('172.16.2.1/30', '172.16.2.2/30', r502, r503)
+    connect_bgp_routers('172.16.4.1/30', '172.16.4.2/30', r502, r504)
+    connect_bgp_routers('172.16.5.1/30', '172.16.5.2/30', r501, r504)
+    connect_bgp_routers('172.16.6.1/30', '172.16.6.2/30', r505, r501)
+
+    connect_bgp_routers('172.16.7.1/30', '172.16.7.2/30', r505, r506)
+    connect_bgp_routers('172.16.8.1/30', '172.16.8.2/30', r504, r503)
+    connect_bgp_routers('172.16.9.1/30', '172.16.9.2/30', r502, r506)
+
+    connect_bgp_routers('172.16.10.1/30', '172.16.10.2/30', r507, r508)
+    connect_bgp_routers('172.16.11.1/30', '172.16.11.2/30', r507, r509)
+    connect_bgp_routers('172.16.12.1/30', '172.16.12.2/30', r507, r510)
+    connect_bgp_routers('172.16.13.1/30', '172.16.13.2/30', r507, r511)
+    connect_bgp_routers('172.16.14.1/30', '172.16.14.2/30', r507, r512)
+    connect_bgp_routers('172.16.15.1/30', '172.16.15.2/30', r507, r506)
+    connect_bgp_routers('172.16.16.1/30', '172.16.16.2/30', r511, r506)
+
+    # Start the routers
+    r501.on()
+    r502.on()
+    r503.on()
+    r504.on()
+    r505.on()
+    r506.on()
+    r507.on()
+    r508.on()
+    r509.on()
+    r510.on()
+    r511.on()
+    r512.on()
+
+    c = 0
+    while True:
+        c += 1
+
+        if c % 10 == 0:
+            debug_message(1, 'r501', 'conf9', r501.ping('70.0.0.254',   '10.0.0.254'))
+            debug_message(1, 'r501', 'conf9', r501.ping('122.0.0.254',  '10.0.0.254'))
+            debug_message(1, 'r512', 'conf9', r512.ping('61.0.0.254',   '120.0.0.254'))
+
+        sleep(1)
+

@@ -50,9 +50,12 @@ class Interface:
             # iterate through __cache, send stored packets
             tmp = []
             for i in range(len(self.__cache)):
-                packet = self.__cache[i]
-                if packet['IP'].dst in self.__arp_table:
-                    full_packet = Ether(src=self.mac, dst=self.__arp_table[packet.dst]) / packet
+                data = self.__cache[i]
+                packet = data[0]
+                dst_ip = data[1]
+
+                if dst_ip in self.__arp_table:
+                    full_packet = Ether(src=self.mac, dst=self.__arp_table[dst_ip]) / packet
                     self.__wire.push(full_packet)
                 else:
                     tmp.append(self.__cache[i])
@@ -75,11 +78,15 @@ class Interface:
     def connect_wire(self, w):
         self.__wire = w
 
-    def send_data(self, packet):
-        if packet.dst not in self.__arp_table:
-            arp = Ether(src=self.mac, dst=ETHER_BROADCAST) / ARP(op=1, hwsrc=self.mac, psrc=self.ip, pdst=packet.dst)
+    def send_data(self, packet, gw=None):
+        dst_ip = packet.dst
+        if gw:
+            dst_ip = gw
+
+        if dst_ip not in self.__arp_table:
+            arp = Ether(src=self.mac, dst=ETHER_BROADCAST) / ARP(op=1, hwsrc=self.mac, psrc=self.ip, pdst=dst_ip)
             self.__wire.push(arp)
-            self.__cache.append(packet)
+            self.__cache.append((packet, dst_ip))
         else:
-            full_packet = Ether(src=self.mac, dst=self.__arp_table[packet.dst]) / packet
+            full_packet = Ether(src=self.mac, dst=self.__arp_table[dst_ip]) / packet
             self.__wire.push(full_packet)

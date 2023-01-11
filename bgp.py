@@ -6,6 +6,7 @@ from scapy.contrib.bgp import BGPHeader, BGPOpen, BGPUpdate, BGPPathAttr, BGPNLR
     BGPPANextHop, BGPPAAS4BytesPath, BGPPAASPath
 
 from tools import int_to_ip, netmask_to_bits, craft_bgp_update, ip_to_int, cidr_to_netmask, debug_message
+from scapy.layers.inet import IP, ICMP, Ether
 
 
 class BGP:
@@ -327,4 +328,7 @@ class BGP:
         self.__client_socket = None
         self.__server_socket = None
         self.__shared_routes = {}
+
+
+
 

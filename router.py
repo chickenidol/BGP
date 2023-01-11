@@ -1,6 +1,8 @@
 import threading
 from time import sleep
 from random import randint
+
+from scapy.contrib.bgp import BGPKeepAlive
 from scapy.layers.inet import IP, ICMP, Ether, TCP
 
 from bgproute import BGPRoute
@@ -9,7 +11,7 @@ from tools import ip_to_int, int_to_ip, debug_message, del_from_list, ip_in_netw
 
 
 class Router:
-    def __init__(self, name, as_id=None):
+    def __init__(self, as_id, name=None):
         self.__interfaces = {}
         self.__bgp = {}
         self.__sockets = {}
@@ -21,6 +23,10 @@ class Router:
         self.__propagated_bgp_networks = []
 
         self.name = name
+
+        if not name:
+            self.name = 'r' + str(as_id)
+
         self.as_id = as_id
         self.state = 0
 
@@ -162,7 +168,7 @@ class Router:
                     as_path = ' '.join(map(str, r.bgp_route.path))
                 msg += f"{self.as_id}   {r.source}  {int_to_ip(r.network)}  {int_to_ip(r.mask)} {int_to_ip(r.gw)}   {int_to_ip(r.interface)}    {as_path} \n"
             if len(self.__routing_table):
-                debug_message(4, f"Router {self.name}", "main_thread", msg)
+                debug_message(3, f"Router {self.name}", "main_thread", msg)
 
             sleep(10)
 

@@ -1,11 +1,13 @@
 import threading
 from time import sleep
 from random import randint
+
+from scapy.contrib.bgp import BGPKeepAlive
 from scapy.layers.l2 import ARP
 from scapy.layers.inet import IP, ICMP, Ether
 from scapy.all import *
 
-from tools import export_scapy
+from tools import export_scapy, debug_message
 
 
 class Interface:
@@ -23,41 +25,38 @@ class Interface:
         self.mask = mask
         self.state = 0
 
-    def __automate(self):
-        packet = self.__wire.pop(self.mac)
-
-        if packet:
-            if packet.haslayer(ARP):
-                if packet[ARP].op == 1:
-                    if packet.pdst == self.ip:
-                        reply = ARP(op=2, hwsrc=self.mac, psrc=self.ip, pdst=packet[ARP].psrc, hwdst=packet[ARP].hwsrc)
-                        full_packet = Ether(dst=packet[ARP].hwsrc, src=self.mac) / reply
-                        self.__wire.push(full_packet)
-                elif packet[ARP].op == 2:
-                    self.__arp_table[packet[ARP].psrc] = packet[ARP].hwsrc
-
-            else:
-                self.__router.receive_data(self, packet)
-
-        # iterate through __cache, send stored packets
-        tmp = []
-        for i in range(len(self.__cache)):
-            packet = self.__cache[i]
-            if packet['IP'].dst in self.__arp_table:
-                full_packet = Ether(src=self.mac, dst=self.__arp_table[packet.dst]) / packet
-                self.__wire.push(full_packet)
-            else:
-                tmp.append(self.__cache[i])
-        self.__cache = tmp
-
     def __main_thread(self):
         while self.state:
             if not self.__wire:
                 sleep(2)
                 continue
 
-            self.__automate()
-            sleep(0.1)
+            packet = self.__wire.pop(self.mac)
+
+            if packet:
+                if packet.haslayer(ARP):
+                    if packet[ARP].op == 1:
+                        if packet.pdst == self.ip:
+                            reply = ARP(op=2, hwsrc=self.mac, psrc=self.ip, pdst=packet[ARP].psrc,
+                                        hwdst=packet[ARP].hwsrc)
+                            full_packet = Ether(dst=packet[ARP].hwsrc, src=self.mac) / reply
+                            self.__wire.push(full_packet)
+                    elif packet[ARP].op == 2:
+                        self.__arp_table[packet[ARP].psrc] = packet[ARP].hwsrc
+
+                else:
+                    self.__router.receive_data(self, packet)
+
+            # iterate through __cache, send stored packets
+            tmp = []
+            for i in range(len(self.__cache)):
+                packet = self.__cache[i]
+                if packet['IP'].dst in self.__arp_table:
+                    full_packet = Ether(src=self.mac, dst=self.__arp_table[packet.dst]) / packet
+                    self.__wire.push(full_packet)
+                else:
+                    tmp.append(self.__cache[i])
+            self.__cache = tmp
 
     def on(self):
         self.state = 1

@@ -43,8 +43,6 @@ class Sock:
                 if len(self.__container) > 0:
                     data = self.__container.pop(0)
                     break
-            sleep(0.1)
-
         return data
 
     # send data
@@ -132,8 +130,8 @@ class Sock:
             else:
                 # check ack and seq
                 if packet[IP].src == self.dst_ip and \
-                        packet[TCP].sport == self.dport and \
-                        packet[TCP].ack == self.seq_num:
+                        packet[TCP].sport == self.dport:
+                        #and packet[TCP].ack == self.seq_num:
                     with self.__data_lock:
                         self.__container.append(packet[TCP].payload)
                         # change ack

@@ -1,8 +1,8 @@
 import threading
 
-from examples import conf1, conf3, conf2
+from examples import conf1, conf3, conf2, conf4, conf5
 
-conf3()
+conf5()
 
 def test_send():
     packet = IP(dst="8.8.8.8", ttl=20) / ICMP()

@@ -5,9 +5,40 @@ import scapy.all as scapy
 from scapy.layers.inet import IP, ICMP, Ether
 from scapy.layers.l2 import ARP
 from router import Router
+from tools import cidr_to_netmask
 from wire import Wire
 from interface import Interface
 from bgp import BGP
+
+
+# helpers
+def connect_bgp_routers(nlri1, nlri2, r1, r2):
+    net1 = nlri1.split('/')[0]
+    net2 = nlri2.split('/')[0]
+
+    i1 = Interface(net1, cidr_to_netmask(nlri1.split('/')[1]))
+    i2 = Interface(net2, cidr_to_netmask(nlri2.split('/')[1]))
+
+    wire = Wire()
+    i1.connect_wire(wire)
+    i2.connect_wire(wire)
+
+    r1.add_interface(i1)
+    r2.add_interface(i2)
+
+    r1.set_bgp(BGP(r1.as_id, r2.as_id, net1, net2))
+    r2.set_bgp(BGP(r2.as_id, r1.as_id, net2, net1))
+
+    return i1, i2
+
+
+def add_announced_network(r1, nlri):
+    network = nlri.split('/')[0]
+    mask = cidr_to_netmask(nlri.split('/')[1])
+
+    i1 = Interface(network, mask)
+    r1.add_interface(i1)
+    r1.add_bgp_network(network, mask)
 
 
 # two routers, the simplest configuration
@@ -147,6 +178,7 @@ def conf2():
     r2.off()
     r3.off()
 
+
 # three interconnected routers, one stops in 10 sec to demonstrate KEEPALIVE functionality
 def conf3():
     # Routers
@@ -241,3 +273,80 @@ def conf3():
     r2.off()
     r3.off()
 
+
+# ring of 4 routers
+def conf4():
+    # Routers
+    r501 = Router(501)
+    r502 = Router(502)
+    r503 = Router(503)
+    r504 = Router(504)
+
+    connect_bgp_routers('172.16.1.1/30', '172.16.1.2/30', r501, r502)
+    connect_bgp_routers('172.16.2.1/30', '172.16.2.2/30', r502, r503)
+    connect_bgp_routers('172.16.3.1/30', '172.16.3.2/30', r503, r504)
+    connect_bgp_routers('172.16.4.1/30', '172.16.4.2/30', r501, r504)
+
+    add_announced_network(r501, '10.0.0.0/16')
+    add_announced_network(r502, '20.0.0.0/16')
+    add_announced_network(r503, '30.0.0.0/16')
+    add_announced_network(r504, '40.0.0.0/16')
+
+    # Start the routers
+    r501.on()
+    r502.on()
+    r503.on()
+    r504.on()
+    c = 0
+    while True:
+        c += 1
+        if c == 30:
+            r504.off()
+
+        sleep(1)
+
+
+# arbitrary configuration of 6 router with router 502 going offline after 100 sec
+def conf5():
+    # Routers
+    r501 = Router(501)
+    r502 = Router(502)
+    r503 = Router(503)
+    r504 = Router(504)
+    r505 = Router(505)
+    r506 = Router(506)
+
+    connect_bgp_routers('172.16.1.1/30', '172.16.1.2/30', r501, r502)
+    connect_bgp_routers('172.16.2.1/30', '172.16.2.2/30', r502, r503)
+    connect_bgp_routers('172.16.4.1/30', '172.16.4.2/30', r502, r504)
+    connect_bgp_routers('172.16.5.1/30', '172.16.5.2/30', r501, r504)
+    connect_bgp_routers('172.16.6.1/30', '172.16.6.2/30', r505, r501)
+
+    connect_bgp_routers('172.16.7.1/30', '172.16.7.2/30', r505, r506)
+    connect_bgp_routers('172.16.8.1/30', '172.16.8.2/30', r504, r503)
+    connect_bgp_routers('172.16.9.1/30', '172.16.9.2/30', r502, r506)
+
+    add_announced_network(r501, '10.0.0.0/16')
+    add_announced_network(r502, '20.0.0.0/16')
+    add_announced_network(r503, '30.0.0.0/16')
+    add_announced_network(r504, '40.0.0.0/16')
+    add_announced_network(r505, '50.0.0.0/16')
+
+    add_announced_network(r506, '61.0.0.0/16')
+    add_announced_network(r506, '62.0.0.0/16')
+
+    # Start the routers
+    r501.on()
+    r502.on()
+    r503.on()
+    r504.on()
+    r505.on()
+    r506.on()
+
+    c = 0
+    while True:
+        c += 1
+        if c == 100:
+            r502.off()
+
+        sleep(1)

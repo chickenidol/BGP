@@ -5,6 +5,10 @@ import threading
 from scapy.utils import rdpcap
 
 from scapy.contrib.bgp import BGPHeader, BGPOpen, BGPUpdate, BGPPathAttr, BGPNLRI_IPv4, BGPPALocalPref, BGPKeepAlive
+
+from tools import debug_message
+
+
 class Wire:
     def __init__(self):
         self.container = []
@@ -15,8 +19,6 @@ class Wire:
         return bytes_base64(zlib.compress(six.moves.cPickle.dumps(obj, 2), 9))
 
     def push(self, data):
-        #if data.haslayer(BGPHeader):
-        #data.show2()
         wrpcap('filtered.pcap', data, append=True)
 
         with self.data_lock:
@@ -24,7 +26,6 @@ class Wire:
             self.container.append(data)
 
     def pop(self, mac):
-
         ret_index = None
         with self.data_lock:
             for i in range(len(self.container)):

@@ -232,7 +232,7 @@ class Router:
             dst_ip = packet[IP].dst
 
             if dst_ip not in self.__interfaces:
-                self.send_data(packet.getlayer(IP))
+                self.send_data(packet)
                 debug_message(5, f"Router {self.name}", "receive_data",
                               f"Router got a packet to route, dst: {dst_ip}")
             else:
@@ -350,7 +350,7 @@ class Router:
 
         if not src_ip or src_ip not in self.__interfaces:
             src_ip = list(self.__interfaces.keys())[0]
-        msg = f'Ping sent from {src_ip} to {dst_ip} ... '
+        msg = f'Ping sent from {src_ip} to {dst_ip}\t...\t'
 
         with self.__ping_lock:
             self.__ping_received = False

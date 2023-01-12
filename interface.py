@@ -45,7 +45,7 @@ class Interface:
                         self.__arp_table[packet[ARP].psrc] = packet[ARP].hwsrc
 
                 else:
-                    self.__router.receive_data(self, packet)
+                    self.__router.receive_data(self, packet.getlayer(IP))
 
             # iterate through __cache, send stored packets
             tmp = []

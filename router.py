@@ -232,7 +232,7 @@ class Router:
             dst_ip = packet[IP].dst
 
             if dst_ip not in self.__interfaces:
-                self.send_data(packet)
+                self.send_data(packet.getlayer(IP))
                 debug_message(5, f"Router {self.name}", "receive_data",
                               f"Router got a packet to route, dst: {dst_ip}")
             else:
@@ -258,6 +258,9 @@ class Router:
                                 if not self.__ping_received:
                                     self.__ping_received = True
                                     self.__ping_data = packet
+        else:
+            debug_message(5, f"Router {self.name}", "receive_data",
+                          f"Router received a packet without IP header.")
 
     def on(self):
         if self.state != 0:

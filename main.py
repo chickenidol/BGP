@@ -16,7 +16,7 @@ def get_args():
     group.add_argument("-c", type=int, help="Configuration to run (1 - 9)")
     group.add_argument("-s", action='store_true', help="Display info on configurations available")
 
-    parser.add_argument("-d", type=int, default=1, help="Debug level (0 - 9)")
+    parser.add_argument("-d", type=int, default=1, help="Debug level (0 - 5)")
     parser.add_argument("-t", type=int, default=180, help="Time to execute simulation")
 
     return parser.parse_args()

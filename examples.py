@@ -4,6 +4,7 @@ from scapy.all import *
 import scapy.all as scapy
 from scapy.layers.inet import IP, ICMP, Ether
 from scapy.layers.l2 import ARP
+
 from router import Router
 from tools import cidr_to_netmask, ip_to_int, int_to_ip, debug_message
 from wire import Wire
@@ -11,7 +12,15 @@ from interface import Interface
 from bgp import BGP
 
 
-# helpers
+def add_announced_network(r1, nlri):
+    network = nlri.split('/')[0]
+    mask = cidr_to_netmask(nlri.split('/')[1])
+
+    i1 = Interface(network, mask)
+    r1.add_interface(i1)
+    r1.add_bgp_network(int_to_ip(ip_to_int(network) & ip_to_int(mask)), mask)
+
+
 def connect_bgp_routers(nlri1, nlri2, r1, r2):
     net1 = nlri1.split('/')[0]
     net2 = nlri2.split('/')[0]
@@ -32,20 +41,11 @@ def connect_bgp_routers(nlri1, nlri2, r1, r2):
     return i1, i2
 
 
-def add_announced_network(r1, nlri):
-    network = nlri.split('/')[0]
-    mask = cidr_to_netmask(nlri.split('/')[1])
-
-    i1 = Interface(network, mask)
-    r1.add_interface(i1)
-    r1.add_bgp_network(int_to_ip(ip_to_int(network) & ip_to_int(mask)), mask)
-
-
-# two routers, the simplest configuration
-def conf1():
+# Configuration 1. Two routers, the simplest configuration.
+def conf1(time_to_run):
     # Routers
-    r1 = Router('r1', 501)
-    r2 = Router('r2', 502)
+    r1 = Router(501)
+    r2 = Router(502)
 
     # Interfaces
     r1_i1 = Interface('10.0.1.1', '255.255.255.252')
@@ -53,6 +53,7 @@ def conf1():
 
     r1_i2 = Interface('20.0.0.254', '255.255.0.0')
     r1.add_interface(r1_i2)
+
     r1.add_bgp_network('20.0.0.0', '255.255.0.0')
 
     r2_i1 = Interface('10.0.1.2', '255.255.255.252')
@@ -80,7 +81,7 @@ def conf1():
     c = 0
     while True:
         c += 1
-        if c > 2000:
+        if c > time_to_run:
             break
 
         sleep(1)
@@ -89,12 +90,12 @@ def conf1():
     r2.off()
 
 
-# three interconnected routers
-def conf2():
+# Configuration 2. Three interconnected routers.
+def conf2(time_to_run):
     # Routers
-    r1 = Router('r1', 501)
-    r2 = Router('r2', 502)
-    r3 = Router('r3', 503)
+    r1 = Router(501)
+    r2 = Router(502)
+    r3 = Router(503)
 
     # Interfaces
     r1_i1 = Interface('10.0.1.1', '255.255.255.252')
@@ -169,7 +170,7 @@ def conf2():
     c = 0
     while True:
         c += 1
-        if c > 2000:
+        if c > time_to_run:
             break
 
         sleep(1)
@@ -179,12 +180,12 @@ def conf2():
     r3.off()
 
 
-# three interconnected routers, one stops in 10 sec to demonstrate KEEPALIVE functionality
-def conf3():
+# Configuration 3. Three interconnected routers, one goes on and off every 43 and 85 seconds.
+def conf3(time_to_run):
     # Routers
-    r1 = Router('r1', 501)
-    r2 = Router('r2', 502)
-    r3 = Router('r3', 503)
+    r1 = Router(501)
+    r2 = Router(502)
+    r3 = Router(503)
 
     # Interfaces
     r1_i1 = Interface('10.0.1.1', '255.255.255.252')
@@ -267,6 +268,9 @@ def conf3():
         if c % 85 == 0:
             r3.off()
 
+        if c > time_to_run:
+            break
+
         sleep(1)
 
     r1.off()
@@ -274,8 +278,8 @@ def conf3():
     r3.off()
 
 
-# ring of 4 routers
-def conf4():
+# Configuration 4. Ring of 4 routers.
+def conf4(time_to_run):
     # Routers
     r501 = Router(501)
     r502 = Router(502)
@@ -303,11 +307,19 @@ def conf4():
         if c == 30:
             r504.off()
 
+        if c > time_to_run:
+            break
+
         sleep(1)
 
+    r501.off()
+    r502.off()
+    r503.off()
+    r504.off()
 
-# arbitrary configuration of 6 router with router 502 going offline after 100 sec
-def conf5():
+
+# Configuration 5. Arbitrary configuration of 6 router with router 502 going offline after 40 sec.
+def conf5(time_to_run):
     # Routers
     r501 = Router(501)
     r502 = Router(502)
@@ -346,13 +358,24 @@ def conf5():
     c = 0
     while True:
         c += 1
-        if c == 100:
+        if c == 40:
             r502.off()
+
+        if c > time_to_run:
+            break
 
         sleep(1)
 
+    r501.off()
+    r502.off()
+    r503.off()
+    r504.off()
+    r505.off()
+    r506.off()
 
-def conf6():
+
+# Configuration 6. Twelve randomly connected routers. Router 502 goes offline after first 30 seconds of work.
+def conf6(time_to_run):
     # Routers
     r501 = Router(501)
     r502 = Router(502)
@@ -421,17 +444,29 @@ def conf6():
     while True:
         c += 1
 
+        if c == 30:
+            r502.off()
 
-        #if c == 100:
-        #    r502.off()
+        if c > time_to_run:
+            break
 
-        sleep(10)
+        sleep(1)
 
+    r501.off()
+    r502.off()
+    r503.off()
+    r504.off()
+    r505.off()
+    r506.off()
+    r507.off()
+    r508.off()
+    r509.off()
+    r510.off()
+    r511.off()
+    r512.off()
 
-
-
-# two routers pinging each other
-def conf7():
+# Configuration 7. Two routers pinging each other.
+def conf7(time_to_run):
     r501 = Router(501)
     r502 = Router(502)
     connect_bgp_routers('172.16.1.1/30', '172.16.1.2/30', r501, r502)
@@ -447,12 +482,17 @@ def conf7():
 
         if c % 10 == 0:
             debug_message(1, 'r501', 'conf7', r501.ping('20.0.0.254', '10.0.0.254'))
+            debug_message(1, 'r502', 'conf7', r502.ping('10.0.0.254', '20.0.0.254'))
+
+        if c > time_to_run:
+            break
 
         sleep(1)
 
-
-# two routers pinging each other through a medium BGP router 502
-def conf8():
+    r501.off()
+    r502.off()
+# Configuration 8. Two routers (501, 502) pinging each other through a medium BGP router 502.
+def conf8(time_to_run):
     r501 = Router(501)
     r502 = Router(502)
     r503 = Router(503)
@@ -473,9 +513,19 @@ def conf8():
         c += 1
         if c % 10 == 0:
             debug_message(1, 'r501', 'conf8', r501.ping('30.0.0.254', '10.0.0.254'))
+            debug_message(1, 'r503', 'conf8', r503.ping('10.0.0.254', '30.0.0.254'))
+
+        if c > time_to_run:
+            break
 
         sleep(1)
-def conf9():
+
+    r501.off()
+    r502.off()
+    r503.off()
+
+# Configuration 9. Twelve randomly connected routers. Some pinging each other.
+def conf9(time_to_run):
     # Routers
     r501 = Router(501)
     r502 = Router(502)
@@ -544,10 +594,31 @@ def conf9():
     while True:
         c += 1
 
+        if c == time_to_run:
+            break
+
+        if c > 60:
+            r507.off()
+
         if c % 10 == 0:
             debug_message(1, 'r501', 'conf9', r501.ping('70.0.0.254',   '10.0.0.254'))
             debug_message(1, 'r501', 'conf9', r501.ping('122.0.0.254',  '10.0.0.254'))
             debug_message(1, 'r512', 'conf9', r512.ping('61.0.0.254',   '120.0.0.254'))
 
+        if c > time_to_run:
+            break
+
         sleep(1)
 
+    r501.off()
+    r502.off()
+    r503.off()
+    r504.off()
+    r505.off()
+    r506.off()
+    r507.off()
+    r508.off()
+    r509.off()
+    r510.off()
+    r511.off()
+    r512.off()

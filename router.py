@@ -122,8 +122,10 @@ class Router:
     def __main_thread(self):
         bgps_in_error_state = {}
         disabled_bgps = {}
+        c = 0
 
         while self.state:
+            c += 1
             best_bgp_routes = self.__get_best_bgp_routes()
 
             for key, bgp_route in best_bgp_routes.items():
@@ -164,18 +166,18 @@ class Router:
                     b.add_shared_routes(best_bgp_routes.values())
 
             msg = ''
-            if len(self.__routing_table):
+            if len(self.__routing_table) and c % 2 == 0:
                 msg = f"Routing table: \n"
                 msg += f"AS   Source  Network  Mask Gateway   Interface AS-PATH\n"
-            for r in self.__routing_table:
-                as_path = ''
-                if r.bgp_route:
-                    as_path = ' '.join(map(str, r.bgp_route.path))
-                msg += f"{self.as_id}   {r.source}  {int_to_ip(r.network)}  {int_to_ip(r.mask)} {int_to_ip(r.gw)}   {int_to_ip(r.interface)}    {as_path} \n"
-            if len(self.__routing_table):
-                debug_message(3, f"Router {self.name}", "main_thread", msg)
+                for r in self.__routing_table:
+                    as_path = ''
+                    if r.bgp_route:
+                        as_path = ' '.join(map(str, r.bgp_route.path))
+                    msg += f"{self.as_id}   {r.source}  {int_to_ip(r.network)}  {int_to_ip(r.mask)} {int_to_ip(r.gw)}   {int_to_ip(r.interface)}    {as_path} \n"
 
-            sleep(10)
+                debug_message(1, f"Router {self.name}", "main_thread", msg)
+
+            sleep(5)
 
     def __print_route(self, route):
         if route:

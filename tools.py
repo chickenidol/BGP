@@ -1,14 +1,23 @@
 import ipaddress
 import threading
+import os
+import sys
 
 from netaddr import IPAddress
+
+
+
 from scapy.compat import bytes_base64
 from scapy.contrib.bgp import BGPPAAS4BytesPath, BGPPathAttr, BGPPALocalPref, BGPUpdate, BGPNLRI_IPv4, BGPPAOrigin, \
     BGPPANextHop, BGPPAMultiExitDisc
 
+
 from scapy.layers.inet import IP, ICMP, Ether, TCP
 from scapy.modules import six
 import zlib
+
+from interface import Interface
+from wire import Wire
 
 
 def netmask_to_bits(mask):
@@ -87,6 +96,7 @@ def ip_in_network(network, mask, ip):
     if (ip & mask) == network:
         return True
     return False
+
 
 
 debug_print_lock = threading.Lock()

@@ -6,7 +6,6 @@ from scapy.utils import rdpcap
 
 from scapy.contrib.bgp import BGPHeader, BGPOpen, BGPUpdate, BGPPathAttr, BGPNLRI_IPv4, BGPPALocalPref, BGPKeepAlive
 
-from tools import debug_message
 
 
 class Wire:

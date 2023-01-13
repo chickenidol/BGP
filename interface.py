@@ -7,8 +7,6 @@ from scapy.layers.l2 import ARP
 from scapy.layers.inet import IP, ICMP, Ether
 from scapy.all import *
 
-from tools import export_scapy, debug_message
-
 
 class Interface:
     def __init__(self, ip, mask):
